@@ -29,7 +29,6 @@ jobs:
       - name: Build Next.js app
         run: |
           npm run build
-          npm run export # Ensure a static build
 
       - name: Prepare deployment folder
         run: |
