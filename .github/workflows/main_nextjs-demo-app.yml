@@ -1,24 +1,74 @@
-deploy:
-  runs-on: ubuntu-latest
-  needs: build
-  environment:
-    name: 'Production'
-    url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
+name: Build and deploy Node.js app to Azure Web App - nextjs-demo-app
 
-  steps:
-    - name: Download artifact from build job
-      uses: actions/download-artifact@v4
-      with:
-        name: node-app
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
 
-    - name: Unzip artifact for deployment
-      run: unzip release.zip -d deploy
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Required for actions/checkout
 
-    - name: Deploy to Azure Web App
-      id: deploy-to-webapp
-      uses: azure/webapps-deploy@v3
-      with:
-        app-name: 'nextjs-demo-app'                # Your Azure Web App name
-        slot-name: 'Production'                    # The slot you're deploying to
-        package: ./deploy                          # Path to the deployed directory
-        publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_59C3096855CB4B5AAD6962F91042528F }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js version
+        uses: actions/setup-node@v3
+        with:
+          node-version: '22.x'
+
+      - name: Install dependencies
+        run: |
+          npm install
+
+      - name: Build Next.js app
+        run: |
+          npm run build
+
+      - name: Zip production artifacts for deployment
+        run: |
+          # Create a deploy directory and copy necessary files
+          mkdir deploy
+          cp -r .next/standalone deploy/ # Copy standalone build
+          cp -r public deploy/          # Copy public folder
+          cp package.json deploy/       # Include package.json
+          cp package-lock.json deploy/  # Include package-lock.json
+          cp -r node_modules deploy/    # Include node_modules (if necessary)
+
+          # Zip the deploy folder content
+          cd deploy && zip -r ../release.zip ./*
+
+      - name: Upload artifact for deployment job
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-app
+          path: release.zip
+
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    environment:
+      name: 'Production'
+      url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
+
+    steps:
+      - name: Download artifact from build job
+        uses: actions/download-artifact@v4
+        with:
+          name: node-app
+
+      - name: Unzip artifact for deployment
+        run: unzip release.zip -d deploy
+
+      - name: Deploy to Azure Web App
+        id: deploy-to-webapp
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: 'nextjs-demo-app'                # Your Azure Web App name
+          slot-name: 'Production'                    # The slot you're deploying to
+          package: ./deploy                          # Path to the deployed directory
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_59C3096855CB4B5AAD6962F91042528F }}
